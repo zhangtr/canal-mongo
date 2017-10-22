@@ -33,12 +33,12 @@ public class DataService {
         logger.info("insert ：{}", obj.toString());
 
         //订单库单独处理
-        if (schemaName.equals("p4_order")) {
+        if (schemaName.equals("order")) {
             //保存原始数据
-            if (tableName.startsWith("p4_order_base_info")) {
-                tableName = "p4_order_base_info";
-            } else if (tableName.startsWith("p4_order_detail_info")) {
-                tableName = "p4_order_detail_info";
+            if (tableName.startsWith("order_base_info")) {
+                tableName = "order_base_info";
+            } else if (tableName.startsWith("order_detail_info")) {
+                tableName = "order_detail_info";
             } else {
                 logger.info("unknown data ：{}.{}:{}", schemaName, tableName, obj);
                 return;
@@ -73,7 +73,7 @@ public class DataService {
     public void delete(List<CanalEntry.Column> data, String schemaName, String tableName) {
         DBObject obj = DBConvertUtil.columnToJson(data);
         logger.info("delete：{}", obj.toString());
-        if (schemaName.equals("p4_order")) {
+        if (schemaName.equals("order")) {
             logger.info("订单表不支持删除：{}.{}:{}", schemaName, tableName, obj);
         } else {
             String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.DELETE.getNumber();
@@ -89,11 +89,11 @@ public class DataService {
         DBObject obj = DBConvertUtil.columnToJson(data);
         logger.info("update：{}", obj.toString());
         //订单库单独处理
-        if (schemaName.equals("p4_order")) {
-            if (tableName.startsWith("p4_order_base_info")) {
-                tableName = "p4_order_base_info";
-            } else if (tableName.startsWith("p4_order_detail_info")) {
-                tableName = "p4_order_detail_info";
+        if (schemaName.equals("order")) {
+            if (tableName.startsWith("order_base_info")) {
+                tableName = "order_base_info";
+            } else if (tableName.startsWith("order_detail_info")) {
+                tableName = "order_detail_info";
             } else {
                 logger.info("unknown data：{}.{}:{}", schemaName, tableName, obj);
             }

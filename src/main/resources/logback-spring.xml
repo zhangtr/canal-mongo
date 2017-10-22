@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--常用符号 %p日志级别 %d{日期时间格式}日期时间 %c类名 %M方法名 %m日志消息 %n换行符 -->
+<configuration>
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%p %d{yyyy/MM/dd HH:mm:ss.SSS} [%t][%c.%M] - %m%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="canalFile" class="ch.qos.logback.classic.sift.SiftingAppender">
+        <discriminator>
+            <Key>destination</Key>
+            <DefaultValue>canal</DefaultValue>
+        </discriminator>
+        <sift>
+            <appender name="FILE-${destination}" class="ch.qos.logback.core.rolling.RollingFileAppender">
+                <File>./logs/${destination}/${destination}.log</File>
+                <rollingPolicy
+                        class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                    <!-- rollover daily -->
+                    <fileNamePattern>./logs/${destination}/%d{yyyy-MM-dd}/${destination}-%d{yyyy-MM-dd}-%i.log.gz
+                    </fileNamePattern>
+                    <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                        <maxFileSize>64MB</maxFileSize>
+                    </timeBasedFileNamingAndTriggeringPolicy>
+                    <maxHistory>60</maxHistory>
+                </rollingPolicy>
+                <encoder>
+                    <pattern>%p %d{yyyy/MM/dd HH:mm:ss.SSS} [%t][%c.%M] - %m%n</pattern>
+                </encoder>
+            </appender>
+        </sift>
+    </appender>
+
+    <logger name="com.alibaba.otter.canal.client" additivity="false">
+        <level value="INFO"/>
+        <appender-ref ref="canalFile"/>
+    </logger>
+    <logger name="com.torry.data.canal" additivity="false">
+        <level value="INFO"/>
+        <appender-ref ref="canalFile"/>
+    </logger>
+    <logger name="com.torry.data.service" additivity="false">
+        <level value="INFO"/>
+        <appender-ref ref="canalFile"/>
+    </logger>
+
+    <logger name="console" level="console"/>
+    <root level="DEBUG">
+        <appender-ref ref="console"/>
+    </root>
+    <root level="INFO">
+        <appender-ref ref="canalFile"/>
+    </root>
+</configuration>

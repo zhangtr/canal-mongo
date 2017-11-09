@@ -6,7 +6,6 @@ import com.mongodb.DBObject;
 import org.apache.commons.lang.StringUtils;
 
 import java.text.DateFormat;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.List;
 
@@ -68,7 +67,7 @@ public class DBConvertUtil {
                     obj.put(column.getName(), column.getValue());
                 }
             }
-        } catch (ParseException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
         return obj;

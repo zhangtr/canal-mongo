@@ -9,7 +9,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,7 +16,7 @@ import java.util.Map;
 /**
  * spring工具类，根据名称或者类型获取bean
  *
- * @author zhangtongrui
+ * @author torry.Zhang
  * @date 2017/8/21
  */
 public class SpringUtil implements ApplicationContextAware {
@@ -27,7 +26,8 @@ public class SpringUtil implements ApplicationContextAware {
     //库名和数据处理Bean映射Map
     private static Map<String, Object> instanceMap = new HashMap<String, Object>();
     //路劲和数据处理Method映射Map
-    private static Map<String, Object> handlerMap = new HashMap<String, Object>();
+    private static Map<String, Method> handlerMap = new HashMap<String, Method>();
+
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) {
         if (SpringUtil.applicationContext == null) {
@@ -39,17 +39,18 @@ public class SpringUtil implements ApplicationContextAware {
         }
     }
 
-    private void instanceMap(){
-        Map<String,Object> beans = applicationContext.getBeansWithAnnotation(Schema.class);
-        for(Object bean:beans.values()){
-            Class<?> clazz=bean.getClass();
+    private void instanceMap() {
+        Map<String, Object> beans = applicationContext.getBeansWithAnnotation(Schema.class);
+        for (Object bean : beans.values()) {
+            Class<?> clazz = bean.getClass();
             Object instance = applicationContext.getBean(clazz);
-            Schema schema =clazz.getAnnotation(Schema.class);
+            Schema schema = clazz.getAnnotation(Schema.class);
             String key = schema.value();
             instanceMap.put(key, instance);
-            logger.info("instanceMap [{}:{}]",key,bean==null?"null":clazz.getName());
+            logger.info("instanceMap [{}:{}]", key, bean == null ? "null" : clazz.getName());
         }
     }
+
     private void handlerMap() {
         if (instanceMap.size() <= 0)
             return;
@@ -64,14 +65,14 @@ public class SpringUtil implements ApplicationContextAware {
                         String tName = table.value();
                         CanalEntry.EventType[] events = table.event();
                         //未标明数据事件类型的方法不做映射
-                        if(events.length<1){
+                        if (events.length < 1) {
                             continue;
                         }
                         //同一个方法可以映射多张表
-                        for(int i=0;i<events.length;i++){
-                            String path="/" + schemeName + "/" + tName+"/"+events[i].getNumber();
+                        for (int i = 0; i < events.length; i++) {
+                            String path = "/" + schemeName + "/" + tName + "/" + events[i].getNumber();
                             handlerMap.put(path, method);
-                            logger.info("handlerMap [{}:{}]",path,method.getName());
+                            logger.info("handlerMap [{}:{}]", path, method.getName());
                         }
                     } else {
                         continue;
@@ -84,28 +85,26 @@ public class SpringUtil implements ApplicationContextAware {
         }
     }
 
-    public static void doEvent(String path, DBObject obj) {
-        String[] pathArray=path.split("/");
-        if(pathArray.length!=4){
-            logger.info("path 格式不正确：{}",path);
+    public static void doEvent(String path, DBObject obj) throws Exception {
+        String[] pathArray = path.split("/");
+        if (pathArray.length != 4) {
+            logger.info("path 格式不正确：{}", path);
             return;
         }
-        Method method = (Method) handlerMap.get(path);
+        Method method = handlerMap.get(path);
         Object schema = instanceMap.get(pathArray[1]);
         //查找不到映射Bean和Method不做处理
-        if(method==null||schema==null){
+        if (method == null || schema == null) {
             return;
         }
         try {
-            method.invoke(schema, new Object[] {obj});
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (IllegalArgumentException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        }catch (Exception e){
-            e.printStackTrace();
+            long begin = System.currentTimeMillis();
+            logger.info("integrate data：{}，{}", path, obj);
+            method.invoke(schema, new Object[]{obj});
+            logger.info("integrate data consume: {}ms：", System.currentTimeMillis() - begin);
+        } catch (Exception e) {
+            logger.error("调用组合逻辑异常", e);
+            throw new Exception(e.getCause());
         }
     }
 

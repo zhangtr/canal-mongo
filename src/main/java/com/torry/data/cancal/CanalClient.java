@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.util.Assert;
 
-import java.util.Date;
 import java.util.List;
 
 /**
@@ -32,8 +31,13 @@ public class CanalClient {
     };
     private Thread thread = null;
     private CanalConnector connector;
+    //行数据日志
     private static String row_format = "binlog[{}:{}] , name[{},{}] , eventType : {} , executeTime : {} , delay : {}ms";
+    //事务日志
     private static String transaction_format = "binlog[{}:{}] , executeTime : {} , delay : {}ms";
+    //数据存储耗时日志
+    private static String execute_format = "binlog[{}:{}] , name[{},{}] , eventType : {} , rowCount: {} , consume : {}ms";
+
     private String destination;
 
     public CanalClient(String destination, CanalConnector connector) {
@@ -98,7 +102,8 @@ public class CanalClient {
     protected void saveEntry(List<Entry> entrys) {
         for (Entry entry : entrys) {
             long executeTime = entry.getHeader().getExecuteTime();
-            long delayTime = new Date().getTime() - executeTime;
+            long startTime = System.currentTimeMillis();
+            long delayTime = startTime - executeTime;
             //打印事务开始结束信息
             if (entry.getEntryType() == EntryType.TRANSACTIONBEGIN || entry.getEntryType() == EntryType.TRANSACTIONEND) {
                 if (entry.getEntryType() == EntryType.TRANSACTIONBEGIN) {
@@ -109,9 +114,7 @@ public class CanalClient {
                         throw new RuntimeException("parse event has an error , data:" + entry.toString(), e);
                     }
                     // 打印事务头信息，执行的线程id，事务耗时
-                    logger.info(transaction_format,
-                            entry.getHeader().getLogfileName(),
-                            String.valueOf(entry.getHeader().getLogfileOffset()),
+                    logger.info(transaction_format, entry.getHeader().getLogfileName(), String.valueOf(entry.getHeader().getLogfileOffset()),
                             String.valueOf(entry.getHeader().getExecuteTime()), String.valueOf(delayTime));
                     logger.info(" BEGIN ----> Thread id: {}", begin.getThreadId());
                 } else if (entry.getEntryType() == EntryType.TRANSACTIONEND) {
@@ -123,9 +126,7 @@ public class CanalClient {
                     }
                     // 打印事务提交信息，事务id
                     logger.info(" END ----> transaction id: {}", end.getTransactionId());
-                    logger.info(transaction_format,
-                            entry.getHeader().getLogfileName(),
-                            String.valueOf(entry.getHeader().getLogfileOffset()),
+                    logger.info(transaction_format, entry.getHeader().getLogfileName(), String.valueOf(entry.getHeader().getLogfileOffset()),
                             String.valueOf(entry.getHeader().getExecuteTime()), String.valueOf(delayTime));
                 }
                 continue;
@@ -139,11 +140,9 @@ public class CanalClient {
                     throw new RuntimeException("parse event has an error , data:" + entry.toString(), e);
                 }
                 EventType eventType = rowChage.getEventType();
-                logger.info(row_format,
-                        entry.getHeader().getLogfileName(),
-                        String.valueOf(entry.getHeader().getLogfileOffset()), entry.getHeader().getSchemaName(),
-                        entry.getHeader().getTableName(), eventType,
-                        String.valueOf(entry.getHeader().getExecuteTime()), String.valueOf(delayTime));
+                logger.info(row_format, entry.getHeader().getLogfileName(), String.valueOf(entry.getHeader().getLogfileOffset()),
+                        entry.getHeader().getSchemaName(), entry.getHeader().getTableName(),
+                        eventType, String.valueOf(entry.getHeader().getExecuteTime()), String.valueOf(delayTime));
                 if (eventType == EventType.QUERY || rowChage.getIsDdl()) {
                     logger.info(" sql ----> " + rowChage.getSql());
                     continue;
@@ -160,6 +159,10 @@ public class CanalClient {
                         logger.info("未知数据变动类型：{}", eventType);
                     }
                 }
+                long consumeTime = System.currentTimeMillis() - startTime;
+                logger.info(execute_format, entry.getHeader().getLogfileName(), String.valueOf(entry.getHeader().getLogfileOffset()),
+                        entry.getHeader().getSchemaName(), entry.getHeader().getTableName(),
+                        eventType, String.valueOf(rowChage.getRowDatasCount()), String.valueOf(consumeTime));
             }
         }
     }

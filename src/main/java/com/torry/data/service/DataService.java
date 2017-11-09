@@ -3,6 +3,7 @@ package com.torry.data.service;
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
+import com.torry.data.common.NameConst;
 import com.torry.data.util.DBConvertUtil;
 import com.torry.data.util.SpringUtil;
 import org.apache.commons.lang.ObjectUtils;
@@ -12,6 +13,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -26,13 +28,13 @@ public class DataService {
 
     @Resource
     MongoTemplate naiveMongoTemplate;
-
+    @Resource
+    MongoTemplate completeMongoTemplate;
 
     public void insert(List<CanalEntry.Column> data, String schemaName, String tableName) {
         DBObject obj = DBConvertUtil.columnToJson(data);
-        logger.info("insert ：{}", obj.toString());
-
-        //订单库单独处理
+        logger.debug("insert ：{}", obj.toString());
+        //分库分表单独处理
         if (schemaName.equals("order")) {
             //保存原始数据
             if (tableName.startsWith("order_base_info")) {
@@ -43,52 +45,35 @@ public class DataService {
                 logger.info("unknown data ：{}.{}:{}", schemaName, tableName, obj);
                 return;
             }
-            //保存关联数据
-            String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.INSERT.getNumber();
-            //保存原始数据
-            naiveMongoTemplate.getCollection(tableName).insert(obj);
-            //保存关联数据
-            SpringUtil.doEvent(path, obj);
+            insertData(schemaName, tableName, obj, obj);
         } else {
-            //保存关联数据
-            String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.INSERT.getNumber();
-            //clone对象，方式对象被修改
+            //数据id作为mongodb数据主键
             DBObject newObj = (DBObject) ObjectUtils.clone(obj);
-            SpringUtil.doEvent(path, newObj);
-            //保存原始数据
-            if (obj.containsField("id")) {
-                obj.put("_id", obj.get("id"));
-                obj.removeField("id");
+            if (newObj.containsField("id")) {
+                newObj.put("_id", newObj.get("id"));
+                newObj.removeField("id");
             }
-            //catch 异常，防止重复读报错
-            try {
-                naiveMongoTemplate.getCollection(tableName).insert(obj);
-            } catch (Exception e) {
-                logger.error("insert data error ：{}", e);
-            }
+            insertData(schemaName, tableName, newObj, obj);
         }
     }
 
 
     public void delete(List<CanalEntry.Column> data, String schemaName, String tableName) {
         DBObject obj = DBConvertUtil.columnToJson(data);
-        logger.info("delete：{}", obj.toString());
+        logger.debug("delete：{}", obj.toString());
+        //个性化设置
         if (schemaName.equals("order")) {
             logger.info("订单表不支持删除：{}.{}:{}", schemaName, tableName, obj);
         } else {
-            String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.DELETE.getNumber();
-            SpringUtil.doEvent(path, obj);
-            if (obj.containsField("id")) {
-                naiveMongoTemplate.getCollection(tableName).remove(new BasicDBObject("_id", obj.get("id")));
-            }
+            deleteData(schemaName, tableName, obj);
         }
     }
 
 
     public void update(List<CanalEntry.Column> data, String schemaName, String tableName) {
         DBObject obj = DBConvertUtil.columnToJson(data);
-        logger.info("update：{}", obj.toString());
-        //订单库单独处理
+        logger.debug("update：{}", obj.toString());
+        //分库分表单独处理
         if (schemaName.equals("order")) {
             if (tableName.startsWith("order_base_info")) {
                 tableName = "order_base_info";
@@ -97,29 +82,108 @@ public class DataService {
             } else {
                 logger.info("unknown data：{}.{}:{}", schemaName, tableName, obj);
             }
-            //修改关联数据
-            String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.UPDATE.getNumber();
-            //修改原始数据
-            naiveMongoTemplate.getCollection(tableName).update(new BasicDBObject("orderId", obj.get("orderId")), obj);
-            SpringUtil.doEvent(path, obj);
+            updateData(schemaName, tableName, new BasicDBObject("orderId", obj.get("orderId")), obj);
         } else {
-            //修改关联数据
-            String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.UPDATE.getNumber();
-            DBObject newObj = (DBObject) ObjectUtils.clone(obj);
-            SpringUtil.doEvent(path, newObj);
-            //修改原始数据
             if (obj.containsField("id")) {
-                Object id = obj.get("id");
-                obj.removeField("id");
-                try {
-                    naiveMongoTemplate.getCollection(tableName).update(new BasicDBObject("_id", id), obj);
-                } catch (Exception e) {
-                    logger.error("update data error ：{}", e);
-                }
+                updateData(schemaName, tableName, new BasicDBObject("_id", obj.get("id")), obj);
             } else {
                 logger.info("unknown data structure");
             }
         }
     }
+
+    public void insertData(String schemaName, String tableName, DBObject naive, DBObject complete) {
+        DBObject logObj = (DBObject) ObjectUtils.clone(complete);
+        String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.INSERT.getNumber();
+        //保存原始数据
+        try {
+            naiveMongoTemplate.getCollection(tableName).insert(naive);
+        } catch (Exception e) {
+            logNaiveError(schemaName, tableName, "INSERT", logObj, e);
+        }
+        //保存关联数据
+        try {
+            SpringUtil.doEvent(path, complete);
+        } catch (Exception e) {
+            logCompleteError(schemaName, tableName, "INSERT", logObj, e);
+        }
+    }
+
+    public void updateData(String schemaName, String tableName, DBObject query, DBObject obj) {
+        DBObject newObj = (DBObject) ObjectUtils.clone(obj);
+        DBObject logObj = (DBObject) ObjectUtils.clone(obj);
+        //保存原始数据
+        try {
+            obj.removeField("id");
+            naiveMongoTemplate.getCollection(tableName).update(query, obj);
+        } catch (Exception e) {
+            logNaiveError(schemaName, tableName, "UPDATE", logObj, e);
+        }
+        String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.UPDATE.getNumber();
+        //保存关联数据
+        try {
+            SpringUtil.doEvent(path, newObj);
+        } catch (Exception e) {
+            logCompleteError(schemaName, tableName, "UPDATE", logObj, e);
+        }
+
+    }
+
+
+    public void deleteData(String schemaName, String tableName, DBObject obj) {
+        String path = "/" + schemaName + "/" + tableName + "/" + CanalEntry.EventType.DELETE.getNumber();
+        DBObject newObj = (DBObject) ObjectUtils.clone(obj);
+        DBObject logObj = (DBObject) ObjectUtils.clone(obj);
+        //保存原始数据
+        try {
+            if (obj.containsField("id")) {
+                naiveMongoTemplate.getCollection(tableName).remove(new BasicDBObject("_id", obj.get("id")));
+            }
+        } catch (Exception e) {
+            logNaiveError(schemaName, tableName, "DELETE", logObj, e);
+        }
+        //保存关联数据
+        try {
+            SpringUtil.doEvent(path, newObj);
+        } catch (Exception e) {
+            logCompleteError(schemaName, tableName, "DELETE", logObj, e);
+        }
+    }
+
+    private void logNaiveError(String schemaName, String tableName, String event, DBObject obj, Exception e) {
+        logger.error("error data：name[{},{}] , eventType : {} , data : [{}]", schemaName, tableName, event, obj);
+        logger.error("保存原始数据异常:", e);
+        DBObject errObj = new BasicDBObject();
+        errObj.put("schemaName", schemaName);
+        errObj.put("tableName", tableName);
+        errObj.put("event", event);
+        errObj.put("data", obj);
+        errObj.put("time", new Date());
+        errObj.put("error", e.toString());
+        completeMongoTemplate.getCollection(NameConst.N_ERROR_RECORD).insert(errObj);
+    }
+
+    /**
+     * 记录拼接表错误记录
+     *
+     * @param schemaName
+     * @param tableName
+     * @param event
+     * @param obj
+     * @param e
+     */
+    private void logCompleteError(String schemaName, String tableName, String event, DBObject obj, Exception e) {
+        logger.error("error data：name[{},{}] , eventType : {} , data : [{}]", schemaName, tableName, event, obj);
+        logger.error("保存组合数据异常:", e);
+        DBObject errObj = new BasicDBObject();
+        errObj.put("schemaName", schemaName);
+        errObj.put("tableName", tableName);
+        errObj.put("event", event);
+        errObj.put("data", obj);
+        errObj.put("time", new Date());
+        errObj.put("error", e.toString());
+        completeMongoTemplate.getCollection(NameConst.C_ERROR_RECORD).insert(errObj);
+    }
+
 
 }

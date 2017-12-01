@@ -2,8 +2,8 @@ package com.torry.data.util;
 
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.mongodb.DBObject;
-import com.torry.data.config.Schema;
-import com.torry.data.config.Table;
+import com.p4.data.config.Schema;
+import com.p4.data.config.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
@@ -16,7 +16,7 @@ import java.util.Map;
 /**
  * spring工具类，根据名称或者类型获取bean
  *
- * @author torry.Zhang
+ * @author zhangtongrui
  * @date 2017/8/21
  */
 public class SpringUtil implements ApplicationContextAware {

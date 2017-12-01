@@ -8,8 +8,8 @@ package com.torry.data.common;
  */
 public class NameConst {
 
-    public static String C_ERROR_RECORD = "complete_error";
-    public static String N_ERROR_RECORD = "naive_error";
+    public static String C_ERROR_RECORD = "data_error_log";
+
 
 
 }

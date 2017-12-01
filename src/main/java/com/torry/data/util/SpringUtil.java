@@ -2,8 +2,8 @@ package com.torry.data.util;
 
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.mongodb.DBObject;
-import com.p4.data.config.Schema;
-import com.p4.data.config.Table;
+import com.torry.data.config.Schema;
+import com.torry.data.config.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;

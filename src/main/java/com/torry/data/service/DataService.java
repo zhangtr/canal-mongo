@@ -5,21 +5,29 @@ import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
 import com.mongodb.MongoClientException;
 import com.mongodb.MongoSocketException;
+import com.torry.data.common.EventData;
 import com.torry.data.common.NameConst;
+import com.torry.data.config.canal.CanalProperties;
 import com.torry.data.util.DBConvertUtil;
 import com.torry.data.util.SpringUtil;
 import org.apache.commons.lang.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.AsyncResult;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.Future;
 
 /**
- * 介绍
+ * DataService,数据处理集合
  *
  * @author zhangtongrui
  * @date 2017/10/13
@@ -32,6 +40,8 @@ public class DataService {
     MongoTemplate naiveMongoTemplate;
     @Resource
     MongoTemplate completeMongoTemplate;
+    @Autowired
+    CanalProperties properties;
 
     public void insert(List<CanalEntry.Column> data, String schemaName, String tableName) {
         DBObject obj = DBConvertUtil.columnToJson(data);
@@ -88,6 +98,21 @@ public class DataService {
                 updateData(schemaName, tableName, new BasicDBObject("_id", obj.get("id")), obj);
             } else {
                 logger.info("unknown data structure");
+            }
+        }
+    }
+
+    public void drop(String tableName) {
+        List<String> enableList = properties.queryDropEnableTableList();
+        if (properties.isDropEnable() || (enableList != null && enableList.size() > 0 && enableList.contains(tableName))) {
+            logger.warn("drop table {} from naive", tableName);
+            System.out.println("drop table " + tableName + " from naive");
+            //防止多表一起drop
+            String[] names = tableName.split(",|`|'");
+            for (String name : names) {
+                if (StringUtils.isNotBlank(name)) {
+                    naiveMongoTemplate.getCollection(name.trim()).remove(new BasicDBObject());
+                }
             }
         }
     }
@@ -177,5 +202,19 @@ public class DataService {
         completeMongoTemplate.getCollection(NameConst.C_ERROR_RECORD).insert(errObj);
     }
 
+    @Async("myTaskAsyncPool")
+    public Future<Integer> doAsyncTask(String tableName, List<EventData> dataList, String destination) {
+        try {
+            MDC.put("destination", destination);
+            logger.info("thread: " + Thread.currentThread().getName() + " is doing job :" + tableName);
+            for (EventData eventData : dataList) {
+                SpringUtil.doEvent(eventData.getPath(), eventData.getDbObject());
+            }
+        } catch (Exception e) {
+            logger.error("thread:" + Thread.currentThread().getName() + " get Exception", e);
+            return new AsyncResult(0);
+        }
+        return new AsyncResult(1);
+    }
 
 }

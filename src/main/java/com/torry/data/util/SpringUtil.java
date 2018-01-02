@@ -88,7 +88,7 @@ public class SpringUtil implements ApplicationContextAware {
     public static void doEvent(String path, DBObject obj) throws Exception {
         String[] pathArray = path.split("/");
         if (pathArray.length != 4) {
-            logger.info("path 格式不正确：{}", path);
+            logger.info("path 格式不正确: {}", path);
             return;
         }
         Method method = handlerMap.get(path);
@@ -99,9 +99,9 @@ public class SpringUtil implements ApplicationContextAware {
         }
         try {
             long begin = System.currentTimeMillis();
-            logger.info("integrate data：{}，{}", path, obj);
+            logger.info("integrate data: {} , {}", path, obj);
             method.invoke(schema, new Object[]{obj});
-            logger.info("integrate data consume: {}ms：", System.currentTimeMillis() - begin);
+            logger.info("integrate data consume: {}ms ", System.currentTimeMillis() - begin);
         } catch (Exception e) {
             logger.error("调用组合逻辑异常", e);
             throw new Exception(e.getCause());

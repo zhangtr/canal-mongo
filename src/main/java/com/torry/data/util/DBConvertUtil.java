@@ -2,7 +2,6 @@ package com.torry.data.util;
 
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.mongodb.BasicDBObject;
-import com.mongodb.DBObject;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,11 +27,10 @@ public class DBConvertUtil {
      * @param columns
      * @return
      */
-    public static DBObject columnToJson(List<CanalEntry.Column> columns) {
-        DBObject obj = new BasicDBObject();
+    public static BasicDBObject columnToJson(List<CanalEntry.Column> columns) {
+        BasicDBObject obj = new BasicDBObject();
         for (CanalEntry.Column column : columns) {
-            String mysqlType = column.getMysqlType();
-            Object value = dataTypeConvert(mysqlType, column.getValue());
+            Object value = dataTypeConvert(column.getMysqlType(), column.getValue());
             obj.put(column.getName(), value);
         }
         return obj;
@@ -67,10 +65,13 @@ public class DBConvertUtil {
                     }
                 }
                 return StringUtils.isBlank(value) ? null : Double.parseDouble(value);
-            } else if (mysqlType.equals("datetime") || mysqlType.equals("timestamp")) {
+            } else if (mysqlType.startsWith("datetime") || mysqlType.startsWith("timestamp")) {
                 return StringUtils.isBlank(value) ? null : DATE_TIME_FORMAT.parse(value);
             } else if (mysqlType.equals("date")) {
                 return StringUtils.isBlank(value) ? null : DATE_FORMAT.parse(value);
+            } else if (mysqlType.startsWith("varchar")) {
+                //设置默认空串
+                return value == null ? "" : value;
             }
         } catch (Exception e) {
             logger.error("data type convert error ", e);

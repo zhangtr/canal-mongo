@@ -19,7 +19,7 @@ public class ApplicationTests {
 	UserService userService;
 
 	@Test
-	public void testEvent() {
+	public void testEvent() throws Exception {
 		assertNotNull(userService);
 		SpringUtil.doEvent("/demo_user/user_info/1",new BasicDBObject("user_no",1));
 	}

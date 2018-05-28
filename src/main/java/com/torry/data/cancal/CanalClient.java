@@ -7,6 +7,7 @@ import com.mongodb.MongoSocketException;
 import com.torry.data.handler.BulkMessageHandler;
 import com.torry.data.handler.MessageHandler;
 import com.torry.data.handler.SingleMessageHandler;
+import com.torry.data.util.SpringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -35,6 +36,10 @@ public class CanalClient {
 
     private String destination;
 
+    public String getDestination() {
+        return destination;
+    }
+
     public CanalClient(String destination, CanalConnector connector) {
         this.destination = destination;
         this.connector = connector;
@@ -58,18 +63,10 @@ public class CanalClient {
             return;
         }
         running = false;
-        if (thread != null) {
-            try {
-                thread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        MDC.remove("destination");
     }
 
     private void process() {
-        int batchSize = 5 * 1024;
+        int batchSize = 4 * 1024;
         while (running) {
             try {
                 MDC.put("destination", destination);
@@ -81,12 +78,11 @@ public class CanalClient {
                     int size = message.getEntries().size();
                     if (batchId != -1 && size > 0) {
                         logger.info(canal_get, batchId, size);
-
                         //优先选择批处理方式处理数据，处理失败或者处理异常转用单条数据插入方式
                         boolean isSuccess;
                         try {
-                            MessageHandler messageHandler = new BulkMessageHandler(message.getEntries());
-                            isSuccess = messageHandler.execute();
+                            MessageHandler messageHandler = SpringUtil.getBean("bulkMessageHandler", BulkMessageHandler.class);
+                            isSuccess = messageHandler.execute(message.getEntries());
                         } catch (MongoClientException | MongoSocketException clientException) {
                             //客户端连接异常抛出，阻塞同步，防止mongodb宕机
                             throw clientException;
@@ -95,13 +91,12 @@ public class CanalClient {
                             isSuccess = false;
                         }
                         if (!isSuccess) {
-                            MessageHandler messageHandler = new SingleMessageHandler(message.getEntries());
-                            messageHandler.execute();
+                            MessageHandler messageHandler = SpringUtil.getBean("singleMessageHandler", SingleMessageHandler.class);
+                            messageHandler.execute(message.getEntries());
                         }
                         logger.info(canal_ack, batchId);
                     }
                     connector.ack(batchId); // 提交确认
-                    // connector.rollback(batchId); // 处理失败, 回滚数据
                 }
             } catch (Exception e) {
                 logger.error("process error!", e);

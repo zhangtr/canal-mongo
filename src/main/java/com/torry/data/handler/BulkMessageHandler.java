@@ -18,7 +18,9 @@ import org.springframework.data.mongodb.core.query.BasicQuery;
 import org.springframework.data.mongodb.core.query.BasicUpdate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,7 +32,7 @@ import java.util.Map;
  * @author zhangtongrui
  * @date 2017/12/12
  */
-
+@Component("bulkMessageHandler")
 public class BulkMessageHandler implements MessageHandler {
     private final static Logger logger = LoggerFactory.getLogger(BulkMessageHandler.class);
     //行数据日志
@@ -42,18 +44,13 @@ public class BulkMessageHandler implements MessageHandler {
     //数据存储耗时日志
     private static String execute_time_format = "bulk handler executeTime ,overData:{}ms overNaive:{}ms overComplete:{}ms";
 
-    //处理数据集
-    private List<Entry> entrys;
+    @Resource
+    MongoTemplate naiveMongoTemplate;
 
-    public BulkMessageHandler(List<Entry> entrys) {
-        this.entrys = entrys;
-    }
+    public boolean execute(List<Entry> entrys) throws Exception {
 
-    private Map<String, List<EventData>> dataMap = new HashMap<>();
-    private List<EventData> dataList = new ArrayList<>();
-
-    public boolean execute() throws Exception {
-        MongoTemplate mongoTemplate = SpringUtil.getBean("naiveMongoTemplate", MongoTemplate.class);
+        Map<String, List<EventData>> dataMap = new HashMap<>();
+        List<EventData> dataList = new ArrayList<>();
         long start = System.currentTimeMillis();
         //遍历数据
         for (Entry entry : entrys) {
@@ -110,22 +107,21 @@ public class BulkMessageHandler implements MessageHandler {
                 for (CanalEntry.RowData rowData : rowChage.getRowDatasList()) {
                     String schemaName = entry.getHeader().getSchemaName();
                     String tableName = entry.getHeader().getTableName();
-                    //可添加处理分表合并逻辑
                     if (eventType == CanalEntry.EventType.DELETE) {
                         BasicDBObject obj = DBConvertUtil.columnToJson(rowData.getBeforeColumnsList());
                         EventData eventData = new EventData(schemaName, tableName, 3, obj);
                         dataList.add(eventData);
-                        addEventToMap(tableName, eventData);
+                        addEventToMap(dataMap, tableName, eventData);
                     } else if (eventType == CanalEntry.EventType.INSERT) {
                         BasicDBObject obj = DBConvertUtil.columnToJson(rowData.getAfterColumnsList());
                         EventData eventData = new EventData(schemaName, tableName, 1, obj);
                         dataList.add(eventData);
-                        addEventToMap(tableName, eventData);
+                        addEventToMap(dataMap, tableName, eventData);
                     } else if (eventType == CanalEntry.EventType.UPDATE) {
                         BasicDBObject obj = DBConvertUtil.columnToJson(rowData.getAfterColumnsList());
                         EventData eventData = new EventData(schemaName, tableName, 2, obj);
                         dataList.add(eventData);
-                        addEventToMap(tableName, eventData);
+                        addEventToMap(dataMap, tableName, eventData);
                     } else {
                         logger.info("未知数据变动类型：{}", eventType);
                     }
@@ -139,7 +135,7 @@ public class BulkMessageHandler implements MessageHandler {
             for (String tableName : dataMap.keySet()) {
                 //有效数据计数
                 int availableCount = 0;
-                BulkOperations testBulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.ORDERED, tableName);
+                BulkOperations testBulk = naiveMongoTemplate.bulkOps(BulkOperations.BulkMode.ORDERED, tableName);
                 List<EventData> list = dataMap.get(tableName);
                 for (EventData eventData : list) {
                     if (eventData.getType() == 1) {
@@ -167,8 +163,8 @@ public class BulkMessageHandler implements MessageHandler {
                         } else {
                             logger.warn("unknown data structure");
                             continue;
-                        }
 
+                        }
                     } else if (eventData.getType() == 3) {
                         if (eventData.getDbObject().containsField("id")) {
                             Query query = new BasicQuery(new BasicDBObject("_id", eventData.getDbObject().get("id")));
@@ -199,7 +195,7 @@ public class BulkMessageHandler implements MessageHandler {
         return true;
     }
 
-    private void addEventToMap(String tableName, EventData eventData) {
+    private void addEventToMap(Map<String, List<EventData>> dataMap, String tableName, EventData eventData) {
         if (dataMap.get(tableName) == null) {
             List<EventData> list = new ArrayList<>();
             list.add(eventData);

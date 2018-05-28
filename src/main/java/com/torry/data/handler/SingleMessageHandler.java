@@ -3,18 +3,20 @@ package com.torry.data.handler;
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.torry.data.service.DataService;
-import com.torry.data.util.SpringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /**
- * 介绍
+ * 逐条插入数据
  *
  * @author zhangtongrui
  * @date 2017/12/12
  */
+@Component("singleMessageHandler")
 public class SingleMessageHandler implements MessageHandler {
 
     private final static Logger logger = LoggerFactory.getLogger(SingleMessageHandler.class);
@@ -24,17 +26,11 @@ public class SingleMessageHandler implements MessageHandler {
     private static String transaction_format = "binlog[{}:{}] , executeTime : {} , delay : {}ms";
     //数据存储耗时日志
     private static String execute_format = "name[{},{}] , eventType : {} , rows : {} consume : {}ms";
-
-    //处理数据集
-    private List<CanalEntry.Entry> entrys;
-
-    public SingleMessageHandler(List<CanalEntry.Entry> entrys) {
-        this.entrys = entrys;
-    }
+    @Autowired
+    DataService dataService;
 
     @Override
-    public boolean execute() throws Exception {
-        DataService dataService = SpringUtil.getBean(DataService.class);
+    public boolean execute(List<CanalEntry.Entry> entrys) throws Exception {
         for (CanalEntry.Entry entry : entrys) {
             long executeTime = entry.getHeader().getExecuteTime();
             long startTime = System.currentTimeMillis();

@@ -2,12 +2,11 @@ package com.torry.data.util;
 
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.mongodb.BasicDBObject;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.joda.time.format.DateTimeFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.List;
 
 /**
@@ -18,8 +17,6 @@ import java.util.List;
  */
 public class DBConvertUtil {
     protected final static Logger logger = LoggerFactory.getLogger(DBConvertUtil.class);
-    private static final DateFormat DATE_TIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
 
     /**
      * binlog行数据列转换成DBObject
@@ -44,6 +41,7 @@ public class DBConvertUtil {
      * @return
      */
     private static Object dataTypeConvert(String mysqlType, String value) {
+
         try {
             if (mysqlType.startsWith("int") || mysqlType.startsWith("tinyint") || mysqlType.startsWith("smallint") || mysqlType.startsWith("mediumint")) {
                 //int(32)
@@ -66,12 +64,14 @@ public class DBConvertUtil {
                 }
                 return StringUtils.isBlank(value) ? null : Double.parseDouble(value);
             } else if (mysqlType.startsWith("datetime") || mysqlType.startsWith("timestamp")) {
-                return StringUtils.isBlank(value) ? null : DATE_TIME_FORMAT.parse(value);
+                return StringUtils.isBlank(value) ? null : DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss").parseDateTime(value).toDate();
             } else if (mysqlType.equals("date")) {
-                return StringUtils.isBlank(value) ? null : DATE_FORMAT.parse(value);
-            } else if (mysqlType.startsWith("varchar")) {
+                return StringUtils.isBlank(value) ? null : DateTimeFormat.forPattern("yyyy-MM-dd").parseDateTime(value).toDate();
+            } else if (mysqlType.startsWith("varchar") || mysqlType.startsWith("char")) {
                 //设置默认空串
                 return value == null ? "" : value;
+            } else {
+                logger.error("unknown data type :[{}]-[{}]", mysqlType, value);
             }
         } catch (Exception e) {
             logger.error("data type convert error ", e);

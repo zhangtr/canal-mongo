@@ -1,5 +1,9 @@
 package com.torry.data.handler;
 
+import com.alibaba.otter.canal.protocol.CanalEntry;
+
+import java.util.List;
+
 /**
  * 介绍
  *
@@ -7,5 +11,5 @@ package com.torry.data.handler;
  * @date 2017/12/12
  */
 public interface MessageHandler {
-    boolean execute() throws Exception;
+    boolean execute(List<CanalEntry.Entry> entrys) throws Exception;
 }

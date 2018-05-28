@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,32 +26,33 @@ public class CanalInitHandler {
     @Autowired
     private CanalProperties canalProperties;
 
+    private final static List<CanalClient> canalClientList = new ArrayList<>();
+
     public void initCanalStart() {
         List<String> destinations = canalProperties.getDestination();
-        final List<CanalClient> canalClientList = new ArrayList<>();
         if (destinations != null && destinations.size() > 0) {
             for (String destination : destinations) {
+                logger.info("## start the canal client : {}", destination);
                 // 基于zookeeper动态获取canal server的地址，建立链接，其中一台server发生crash，可以支持failover
                 CanalConnector connector = CanalConnectors.newClusterConnector(canalProperties.getZkServers(), destination, "", "");
                 CanalClient client = new CanalClient(destination, connector);
-                canalClientList.add(client);
                 client.start();
+                canalClientList.add(client);
             }
         }
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            public void run() {
-                try {
-                    logger.info("## stop the canal client");
-                    for (CanalClient canalClient : canalClientList) {
-                        canalClient.stop();
-                    }
-                } catch (Throwable e) {
-                    logger.warn("##something goes wrong when stopping canal:", e);
-                } finally {
-                    logger.info("## canal client is down.");
-                }
-            }
+    }
 
-        });
+    @PreDestroy
+    public void canalStop() {
+        for (CanalClient canalClient : canalClientList) {
+            logger.info("## stop the canal client : {}", canalClient.getDestination());
+            canalClient.stop();
+        }
+        try {
+            Thread.currentThread().join(8000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        logger.info("## all client stopped ");
     }
 }
